@@ -10,7 +10,6 @@ import (
 )
 
 func main() {
-
 	conf := initConfig()
 
 	// Establish a gRPC connection with the node.
@@ -20,8 +19,15 @@ func main() {
 		fmt.Fprintln(os.Stdout, err)
 		os.Exit(1)
 	}
-	// TODO: deferred functions are not run when os.Exit is called
-	defer client.Close()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	// Defer the client.Close() call using the WaitGroup
+	defer func() {
+		client.Close()
+		wg.Done()
+	}()
 
 	// Inquire node about its wallet state, so we know which menu to open.
 	resp, err := client.c.GetWalletStatus(context.Background(), &node.EmptyRequest{})
@@ -30,20 +36,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// If we have no wallet loaded, we open the menu to load or
-	// create one.
-	if !resp.Loaded {
-		if err := prompt.LoadMenu(client.c); err != nil {
-			// If we get an error from `LoadMenu`, it means we lost
-			// our connection to the node.
-			fmt.Fprintln(os.Stdout, err.Error())
-			os.Exit(1)
-		}
-	}
-
-	// Once loaded, we open the menu for wallet operations.
-	if err := prompt.WalletMenu(client.c); err != nil {
-		fmt.Fprintln(os.Stdout, err.Error())
-		os.Exit(1)
+	wg.Wait() // Wait for the deferred tasks to complete before exiting
 	}
 }
